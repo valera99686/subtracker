@@ -248,6 +248,12 @@
     </div>
     <div>
       <div class="panel">
+        <h2>💰 Доходи <span class="count" id="incCount">0</span>
+          <button class="small" style="margin-left:auto" onclick="openIncomeModal()">+ Додати</button>
+        </h2>
+        <div id="incomeList"></div>
+      </div>
+      <div class="panel">
         <h2>⏰ Найближчі списання</h2>
         <div id="upcoming"></div>
       </div>
@@ -365,6 +371,48 @@
   </div>
 </div>
 
+<!-- Income modal -->
+<div class="modal-overlay" id="incomeModal">
+  <div class="modal">
+    <h3 id="incomeModalTitle">Нове джерело доходу</h3>
+    <div class="field">
+      <label>Назва *</label>
+      <input type="text" id="i_name" placeholder="Зарплата, фріланс, стипендія…">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Сума *</label>
+        <input type="number" id="i_amount" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="field">
+        <label>Валюта</label>
+        <select id="i_currency">
+          <option value="UAH">₴ UAH</option>
+          <option value="USD">$ USD</option>
+          <option value="EUR">€ EUR</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Періодичність</label>
+      <select id="i_cycle">
+        <option value="monthly">Щомісяця</option>
+        <option value="weekly">Щотижня</option>
+        <option value="quarterly">Щокварталу</option>
+        <option value="yearly">Щороку</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Нотатка</label>
+      <input type="text" id="i_notes" placeholder="наприклад: основна робота">
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="document.getElementById('incomeModal').classList.remove('open')">Скасувати</button>
+      <button class="primary" onclick="saveIncome()">Зберегти</button>
+    </div>
+  </div>
+</div>
+
 <!-- Donate modal -->
 <div class="modal-overlay" id="donateModal">
   <div class="modal">
@@ -390,9 +438,11 @@ const DONATE = {
 
 const LS_KEY = 'subtracker.v1';
 const LS_SETTINGS = 'subtracker.settings.v1';
+const LS_INCOMES = 'subtracker.incomes.v1';
 const LS_THEME = 'subtracker.theme';
 
 let subs = [];
+let incomes = [];
 let settings = { usd: 41.5, eur: 45.0 };
 let editingId = null;
 
@@ -408,10 +458,11 @@ function lsSet(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
 function load(){
   try { subs = JSON.parse(lsGet(LS_KEY)) || []; } catch(e){ subs = []; }
   try { settings = Object.assign(settings, JSON.parse(lsGet(LS_SETTINGS)) || {}); } catch(e){}
+  try { incomes = JSON.parse(lsGet(LS_INCOMES)) || []; } catch(e){ incomes = []; }
   if (lsGet(LS_THEME) === 'light') document.documentElement.setAttribute('data-theme','light');
   rollDates();
 }
-function save(){ lsSet(LS_KEY, JSON.stringify(subs)); }
+function save(){ lsSet(LS_KEY, JSON.stringify(subs)); lsSet(LS_INCOMES, JSON.stringify(incomes)); }
 function saveSettingsLS(){ lsSet(LS_SETTINGS, JSON.stringify(settings)); }
 
 /* ---------- dates ---------- */
@@ -454,6 +505,7 @@ function toUAH(price, cur){
   return price;
 }
 function monthlyUAH(s){ return toUAH(s.price, s.currency) * CYCLE_PER_MONTH[s.cycle]; }
+function monthlyIncomeUAH(r){ return toUAH(r.amount, r.currency) * CYCLE_PER_MONTH[r.cycle]; }
 function fmtUAH(n){
   return n.toLocaleString('uk-UA', { maximumFractionDigits:0 }) + ' ₴';
 }
@@ -487,14 +539,28 @@ function render(){
   renderUpcoming();
   renderChart();
   renderCatFilter();
+  renderIncomes();
 }
 
 function renderStats(){
   const month = subs.reduce((a,s) => a + monthlyUAH(s), 0);
   const year = month * 12;
   const wasted = subs.filter(s => s.usage === 'rarely').reduce((a,s) => a + monthlyUAH(s), 0);
+  const incMonth = incomes.reduce((a,r) => a + monthlyIncomeUAH(r), 0);
+  const left = incMonth - month;
+  const pct = incMonth > 0 ? Math.round(month / incMonth * 100) : 0;
   const el = document.getElementById('stats');
   el.innerHTML = `
+    <div class="stat green">
+      <div class="label">Дохід на місяць</div>
+      <div class="value">${fmtUAH(incMonth)}</div>
+      <div class="sub">${incomes.length ? 'джерел доходу: ' + incomes.length : 'додайте джерело доходу'}</div>
+    </div>
+    <div class="stat ${left < 0 ? 'warn' : ''}">
+      <div class="label">Після підписок лишається</div>
+      <div class="value">${incomes.length ? fmtUAH(left) : '—'}</div>
+      <div class="sub">${incMonth > 0 ? 'підписки зʼїдають ' + pct + '% доходу' : 'порахуємо, коли буде дохід'}</div>
+    </div>
     <div class="stat">
       <div class="label">Витрати на місяць</div>
       <div class="value">${fmtUAH(month)}</div>
@@ -708,7 +774,7 @@ function saveSettings(){
 
 /* ---------- import / export ---------- */
 function exportJSON(){
-  const blob = new Blob([JSON.stringify({ subs, settings }, null, 2)], { type:'application/json' });
+  const blob = new Blob([JSON.stringify({ subs, incomes, settings }, null, 2)], { type:'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'subtracker-backup-' + fmtDateISO(today0()) + '.json';
@@ -727,6 +793,7 @@ function importJSON(ev){
       if (!Array.isArray(arr)) throw new Error('bad format');
       subs = arr.filter(s => s && s.name && s.nextDate && typeof s.price === 'number');
       subs.forEach(s => { if (!s.id) s.id = 'id' + Math.random().toString(36).slice(2,10); });
+      if (Array.isArray(data.incomes)) incomes = data.incomes.filter(r => r && r.name && typeof r.amount === 'number');
       if (data.settings) settings = Object.assign(settings, data.settings);
       save(); saveSettingsLS(); render();
       toast('Імпортовано: ' + subs.length + ' підписок ✓');
@@ -746,6 +813,75 @@ function toggleTheme(){
     document.documentElement.setAttribute('data-theme', 'light');
     lsSet(LS_THEME, 'light');
   }
+}
+
+/* ---------- incomes ---------- */
+let editingIncomeId = null;
+function renderIncomes(){
+  document.getElementById('incCount').textContent = incomes.length;
+  const el = document.getElementById('incomeList');
+  if (!incomes.length){
+    el.innerHTML = '<div style="color:var(--muted); font-size:13px">Додайте зарплату чи інші надходження — побачите, скільки лишається після підписок.</div>';
+    return;
+  }
+  el.innerHTML = incomes.map(r => `
+    <div class="upcoming-item">
+      <div class="up-icon" style="background:${colorFor(r.name)}">${esc(r.name[0].toUpperCase())}</div>
+      <div class="up-info">
+        <div class="name">${esc(r.name)}</div>
+        <div class="meta">${CYCLE_LABEL[r.cycle]}${r.notes ? ' · ' + esc(r.notes) : ''}</div>
+      </div>
+      <div class="up-right">
+        <div class="price" style="color:var(--accent2)">+${CUR_SYMBOL[r.currency]}${r.amount.toLocaleString('uk-UA', { maximumFractionDigits:2 })}</div>
+        <div class="days-badge">≈${fmtUAH(monthlyIncomeUAH(r))}/міс</div>
+      </div>
+      <div class="sub-actions">
+        <button title="Редагувати" onclick="openIncomeModal('${r.id}')">✎</button>
+        <button title="Видалити" class="danger-btn" onclick="deleteIncome('${r.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+function openIncomeModal(id){
+  editingIncomeId = id || null;
+  document.getElementById('incomeModalTitle').textContent = id ? 'Редагувати дохід' : 'Нове джерело доходу';
+  const r = id ? incomes.find(x => x.id === id) : null;
+  document.getElementById('i_name').value = r ? r.name : '';
+  document.getElementById('i_amount').value = r ? r.amount : '';
+  document.getElementById('i_currency').value = r ? r.currency : 'UAH';
+  document.getElementById('i_cycle').value = r ? r.cycle : 'monthly';
+  document.getElementById('i_notes').value = r ? (r.notes || '') : '';
+  document.getElementById('incomeModal').classList.add('open');
+  document.getElementById('i_name').focus();
+}
+function saveIncome(){
+  const name = document.getElementById('i_name').value.trim();
+  const amount = parseFloat(document.getElementById('i_amount').value);
+  if (!name){ toast('Вкажіть назву доходу'); return; }
+  if (isNaN(amount) || amount <= 0){ toast('Вкажіть коректну суму'); return; }
+  const data = {
+    name,
+    amount,
+    currency: document.getElementById('i_currency').value,
+    cycle: document.getElementById('i_cycle').value,
+    notes: document.getElementById('i_notes').value.trim(),
+  };
+  if (editingIncomeId){
+    const i = incomes.findIndex(x => x.id === editingIncomeId);
+    incomes[i] = Object.assign(incomes[i], data);
+  } else {
+    data.id = 'in' + Math.random().toString(36).slice(2, 10);
+    incomes.push(data);
+  }
+  save();
+  document.getElementById('incomeModal').classList.remove('open');
+  render();
+  toast('Дохід збережено ✓');
+}
+function deleteIncome(id){
+  const r = incomes.find(x => x.id === id);
+  if (!confirm(`Видалити «${r.name}»?`)) return;
+  incomes = incomes.filter(x => x.id !== id);
+  save(); render();
 }
 
 /* ---------- donate ---------- */
@@ -771,6 +907,10 @@ function loadDemo(){
     { id:'d5', name:'Фітнес-зал FitCurves', price:900, currency:'UAH', cycle:'monthly', nextDate:plus(5), category:'Здоровʼя і спорт', usage:'rarely', trial:false, notes:'не був 2 місяці…' },
     { id:'d6', name:'YouTube Premium', price:5.99, currency:'EUR', cycle:'monthly', nextDate:plus(2), category:'Розваги', usage:'often', trial:true, notes:'тріал!' },
     { id:'d7', name:'Megogo', price:299, currency:'UAH', cycle:'monthly', nextDate:plus(21), category:'Розваги', usage:'rarely', trial:false, notes:'дивився раз' },
+  ];
+  incomes = [
+    { id:'in1', name:'Зарплата', amount:25000, currency:'UAH', cycle:'monthly', notes:'' },
+    { id:'in2', name:'Фріланс', amount:200, currency:'USD', cycle:'monthly', notes:'підробіток' },
   ];
   save(); render();
   toast('Завантажено демо-дані — їх можна редагувати чи видалити');
