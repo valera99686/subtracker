@@ -221,6 +221,7 @@
       <button class="ghost" onclick="exportJSON()">⭳ Експорт</button>
       <button class="ghost" onclick="document.getElementById('importFile').click()">⭱ Імпорт</button>
       <button class="ghost" onclick="toggleTheme()" id="themeBtn">☀</button>
+      <button id="donateBtn" style="display:none; background:linear-gradient(135deg,#ffb84d,#ff8a5c); color:#1b1e2b" onclick="openDonate()">☕ Підтримати</button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
     </div>
   </header>
@@ -364,9 +365,29 @@
   </div>
 </div>
 
+<!-- Donate modal -->
+<div class="modal-overlay" id="donateModal">
+  <div class="modal">
+    <h3>☕ Підтримати проєкт</h3>
+    <p style="color:var(--muted); font-size:13.5px; line-height:1.6; margin-bottom:16px">
+      СубТрекер безкоштовний і таким залишиться — без реклами, реєстрацій і доступу до банку.
+      Якщо він допоміг вам заощадити, можете подякувати автору донатом 💛
+    </p>
+    <div id="donateActions"></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="document.getElementById('donateModal').classList.remove('open')">Закрити</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
+const DONATE = {
+  url: 'https://www.privat24.ua/send/jygmz',
+  card: '5168 7521 5692 1671'
+};
+
 const LS_KEY = 'subtracker.v1';
 const LS_SETTINGS = 'subtracker.settings.v1';
 const LS_THEME = 'subtracker.theme';
@@ -727,6 +748,18 @@ function toggleTheme(){
   }
 }
 
+/* ---------- donate ---------- */
+function initDonate(){
+  if(!DONATE.url && !DONATE.card) return;
+  document.getElementById('donateBtn').style.display='';
+  var h='';
+  if(DONATE.url) h+='<a href="'+DONATE.url+'" target="_blank" rel="noopener" style="display:block;text-align:center;background:linear-gradient(135deg,#ffb84d,#ff8a5c);color:#1b1e2b;font-weight:700;border-radius:12px;padding:12px;text-decoration:none;margin-bottom:10px">Задонатити 💛</a>';
+  if(DONATE.card) h+='<div style="display:flex;gap:8px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="flex:1;font-weight:600;letter-spacing:1px">'+DONATE.card+'</span><button class="small" onclick="copyCard()">Копіювати</button></div>';
+  document.getElementById('donateActions').innerHTML=h;
+}
+function openDonate(){ document.getElementById('donateModal').classList.add('open'); }
+function copyCard(){ var n=DONATE.card.replace(/\s/g,''); if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(n).then(function(){toast('Номер картки скопійовано ✓');},function(){toast(n);});}else{toast(n);} }
+
 function loadDemo(){
   const t = today0();
   const plus = days => { const d = new Date(t); d.setDate(d.getDate() + days); return fmtDateISO(d); };
@@ -753,6 +786,7 @@ document.addEventListener('keydown', e => {
 
 load();
 render();
+initDonate();
 </script>
 </body>
 </html>
